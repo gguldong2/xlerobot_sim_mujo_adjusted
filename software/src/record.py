@@ -122,20 +122,20 @@ GLOBAL_BACK_GOAL = np.array([-99.1578, -67.1670, 21.1723, 99.1829, 5.7592, 0.804
 GLOBAL_OPEN_GOAL = np.array([-99.1578, -67.1670, 21.1723, 99.1829, 5.7592, 36, 99.8230, -67.0739, 21.0242, 99.1322, -0.6326, 36])
 def reset_follower_position(robot, target_position, steps=50, delay=0.015, start_position=None):
     """
-    让机器人平滑移动到目标位置，生成可记录的动作序列
+    Move the robot smoothly to the target position and generate a recordable action sequence.
     
     Args:
-        robot: 机器人对象 (需要有 bus1, bus2 属性)
-        target_position: 目标位置数组 [left_arm_joints..., right_arm_joints...]
-        steps: 轨迹步数 (默认150)
-        delay: 每步延迟时间 (默认15ms)
+        robot: The robot object (must have attributes bus1 and bus2).
+        target_position: Target position array [left_arm_joints..., right_arm_joints...].
+        steps: Number of trajectory steps (default: 150).
+        delay: Delay time per step in milliseconds (default: 15 ms).
     
     Returns:
-        list: 动作序列，每个元素是一个动作字典
+        list: The action sequence, where each element is an action dictionary.
     """
-    # 读取当前位置
+    # Read the current position
+
     left_current_position_dict = robot.bus1.sync_read("Present_Position")
-    # 将键名统一为 '<motor_name>.pos' 形式，便于与其他代码中的键名一致
     right_current_position_dict = robot.bus2.sync_read("Present_Position")
     if start_position is not None:
         left_current_position, right_current_position = start_position[0:6], start_position[6:12]
@@ -146,11 +146,9 @@ def reset_follower_position(robot, target_position, steps=50, delay=0.015, start
         right_current_position = np.array(
             [right_current_position_dict[name] for name in right_current_position_dict], dtype=np.float32
         )
-    
-    # 分离左右臂目标位置
+
     left_target_position, right_target_position = target_position[0:6], target_position[6:12]
     
-    # 生成平滑轨迹 (保持最后几个关节不变)
     if start_position is None:
         left_trajectory = torch.from_numpy(
             np.linspace(left_current_position, np.concatenate((left_target_position, left_current_position[-2:])), steps)
@@ -166,7 +164,7 @@ def reset_follower_position(robot, target_position, steps=50, delay=0.015, start
             np.linspace(right_current_position, right_target_position, steps)
         )
     
-    # 生成动作序列
+    # generate action sequence
     action_sequence = []
     left_current_position_dict = {f"{k}.pos" for k in left_current_position_dict}
     left_current_position_dict = [
@@ -203,7 +201,6 @@ def reset_follower_position(robot, target_position, steps=50, delay=0.015, start
             "theta.vel": 0,
         }
         
-        # 合并为完整的动作字典
         action_dict = {**left_action_dict, **head_motor_dict, **right_action_dict, **base_action_dict}
         action_sequence.append(action_dict)
     
@@ -211,14 +208,15 @@ def reset_follower_position(robot, target_position, steps=50, delay=0.015, start
 
 def queue_reset_actions(action_queue, robot, target_position, steps=50, start_position=None):
     """
-    将重置动作序列加入队列
+    Add a reset action sequence to the queue.
     
     Args:
-        action_queue: 动作队列
-        robot: 机器人对象
-        target_position: 目标位置
-        steps: 轨迹步数
+        action_queue: The action queue.
+        robot: The robot object.
+        target_position: The target position.
+        steps: Number of trajectory steps.
     """
+
     action_sequence = reset_follower_position(robot, target_position, steps, start_position=start_position)
     action_queue.extend(action_sequence)
     logging.info(f"Queued {len(action_sequence)} reset actions")
@@ -342,7 +340,7 @@ def record_loop(
     if policy is not None:
         policy.reset()
 
-    # 初始化动作队列
+    # Init action queue
     if action_queue is None:
         action_queue = deque()
 
@@ -365,12 +363,12 @@ def record_loop(
             observation = robot.get_observation()
         except TimeoutError as e:
             logging.warning(f"Camera timeout: {e}. Skipping this frame.")
-            continue  # 跳过当前帧，继续循环
+            continue  # skip current
 
         if policy is not None or dataset is not None:
             observation_frame = build_dataset_frame(dataset.features, observation, prefix="observation")
         
-        # 如果队列里有action直接执行, 不采集action
+        # if queue not None, use the action
         if action_queue:
             action = action_queue.popleft()
             if action == {}: # flag for the reset
@@ -411,24 +409,20 @@ def record_loop(
         if events["reset_position"]:
             logging.info("Rest to the zero position of robot")
             log_say("Reset position")
-            # target_position = np.zeros(12)
-            # if len(action_queue) < 10:  # 如果队列里有很多动作就不加入复位动作
-            #     queue_reset_actions(action_queue, robot, target_position)
-            # 直接复位
             action = teleop.move_to_zero_position(robot)
             teleop.vr_event_handler.events['reset_position'] = False
-            events["reset_position"] = False  # 重置事件状态
+            events["reset_position"] = False 
         elif events["back_position"]:
             logging.info("Back to the backet position of robot")
             log_say("Back backet position")
-            if len(action_queue) < 10:  # 如果队列里有很多动作就不加入复位动作
-                # 放置松手,和复位一体化
+            if len(action_queue) < 10:  
+                # Place in back and reset
                 queue_reset_actions(action_queue, robot, GLOBAL_BACK_GOAL, steps=30)
                 queue_reset_actions(action_queue, robot, GLOBAL_OPEN_GOAL, steps=10, start_position=GLOBAL_BACK_GOAL)
                 queue_reset_actions(action_queue, robot, np.zeros(12), steps=30, start_position=GLOBAL_OPEN_GOAL)
                 action_queue.append({}) # reset to zero flag
             teleop.vr_event_handler.events['back_position'] = False
-            events["back_position"] = False  # 返回事件状态
+            events["back_position"] = False  # reset event state
             
         sent_action = robot.send_action(action)
 
@@ -496,15 +490,15 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         teleop.connect(robot=robot)
         teleop.send_feedback()
 
-    # 根据teleop类型选择合适的事件监听器
+    # Select acording teleoperator
     if isinstance(teleop, XLerobotVRTeleop):
-        # 使用VR事件监听器
+        # Use VR listener
         listener, events = init_vr_listener(teleop)
-        logging.info("🎮 使用VR左手柄控制录制状态")
+        logging.info("🎮 Using VR to control recording status")
     else:
-        # 使用传统键盘监听器
+        # Use keyboard listener
         listener, events = init_keyboard_listener()
-        logging.info("⌨️ 使用键盘控制录制状态")
+        logging.info("⌨️ Using keyboard to control recording status")
 
     with VideoEncodingManager(dataset):
         recorded_episodes = 0

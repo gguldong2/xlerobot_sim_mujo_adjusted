@@ -25,12 +25,12 @@ from ..config import TeleoperatorConfig
 class XLerobotVRTeleopConfig(TeleoperatorConfig):
 
     
-    # VR系统设置
+    # VR sysytem setting
     vr_enabled: bool = True
-    vr_connection_timeout: float = 10.0  # VR连接超时时间(秒)
-    vr_data_timeout: float = 5.0  # VR数据获取超时时间(秒)
+    vr_connection_timeout: float = 10.0 
+    vr_data_timeout: float = 5.0  
 
-    kp : float = 1.0  # 位置控制比例增益
+    kp : float = 1.0 
     
 
-    xlevr_path: Optional[str] = "/home/cics/Desktop/codes/projects/XLeRobot/XLeVR"
+    xlevr_path: Optional[str] = "/your_local_DIR/XLeRobot/XLeVR" # need to be modified

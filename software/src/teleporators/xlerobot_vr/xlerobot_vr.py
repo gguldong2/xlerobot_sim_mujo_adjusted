@@ -16,7 +16,7 @@
 
 """
 XLerobot VR Teleoperator
-基于8_xlerobot_VR_teleop.py中的VR控制逻辑，按照teleop_keyboard的格式重构
+Refactored based on VR control logic from 8_xlerobot_VR_teleop.py, following teleop_keyboard format
 """
 
 import asyncio
@@ -41,10 +41,10 @@ from .configuration_xlerobot_vr import XLerobotVRTeleopConfig
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# 检查VR Monitor可用性
+# Check VR Monitor availability
 VR_AVAILABLE = True
 try:
-    # 动态导入VR Monitor 
+    # Dynamically import VR Monitor 
     from .vr_monitor import VRMonitor
 except ImportError as e:
     VR_AVAILABLE = False
@@ -56,7 +56,7 @@ except Exception as e:
     logging.warning(f"Could not import VR Monitor: {e}")
 
 
-# Joint mapping configurations (从8_xlerobot_VR_teleop.py复制)
+# Joint mapping configurations (copied from 8_xlerobot_VR_teleop.py)
 LEFT_JOINT_MAP = {
     "shoulder_pan": "left_arm_shoulder_pan",
     "shoulder_lift": "left_arm_shoulder_lift",
@@ -80,7 +80,7 @@ HEAD_MOTOR_MAP = {
     "head_motor_2": "head_motor_2",
 }
 
-# Joint calibration coefficients (从8_xlerobot_VR_teleop.py复制)
+# Joint calibration coefficients (copied from 8_xlerobot_VR_teleop.py)
 JOINT_CALIBRATION = [
     ['shoulder_pan', 6.0, 1.0],      
     ['shoulder_lift', 2.0, 0.97],     
@@ -191,7 +191,7 @@ class SimpleTeleopArm:
         # print(current_vr_pos)
         
         # Calculate relative change (delta) from previous frame
-        vr_x = (current_vr_pos[0] - self.prev_vr_pos[0]) * 170 # Scale for the shoulder
+        vr_x = (current_vr_pos[0] - self.prev_vr_pos[0]) * 170  # Scale for the shoulder
         vr_y = (current_vr_pos[1] - self.prev_vr_pos[1]) * 80
         vr_z = (current_vr_pos[2] - self.prev_vr_pos[2]) * 80
 
@@ -224,8 +224,8 @@ class SimpleTeleopArm:
         delta_y = max(-delta_limit, min(delta_limit, delta_y))
         delta_z = max(-delta_limit, min(delta_limit, delta_z))
         
-        self.current_x += -delta_z  # yy: VR Z maps to robot x, change the direction
-        self.current_y += delta_y  # yy:VR Y maps to robot y
+        self.current_x += -delta_z  # VR Z maps to robot x, change the direction
+        self.current_y += delta_y  # VR Y maps to robot y
 
         # Handle wrist angles with delta control - use relative changes
         if hasattr(vr_goal, 'wrist_flex_deg') and vr_goal.wrist_flex_deg is not None:
@@ -277,7 +277,7 @@ class SimpleTeleopArm:
         
         try:
             joint2_target, joint3_target = self.kinematics.inverse_kinematics(self.current_x, self.current_y)
-            # Smooth transition to new joint positions,  Smoothing factor 0-1, lower = smoother
+            # Smooth transition to new joint positions, smoothing factor 0-1, lower = smoother
             alpha = 0.1
             self.target_positions["shoulder_lift"] = (1-alpha) * self.target_positions.get("shoulder_lift", 0.0) + alpha * joint2_target
             self.target_positions["elbow_flex"] = (1-alpha) * self.target_positions.get("elbow_flex", 0.0) + alpha * joint3_target
@@ -416,8 +416,8 @@ def get_vr_base_action(vr_goal, robot):
 
 class XLerobotVRTeleop(Teleoperator):
     """
-    XLerobot VR Teleoperator类
-    按照teleop_keyboard的格式，集成8_xlerobot_VR_teleop.py中的VR控制逻辑
+    XLerobot VR Teleoperator class
+    Following the format of teleop_keyboard, integrating VR control logic from 8_xlerobot_VR_teleop.py
     """
 
     config_class = XLerobotVRTeleopConfig
@@ -427,26 +427,26 @@ class XLerobotVRTeleop(Teleoperator):
         super().__init__(config)
         self.config = config
         
-        # VR系统相关
+        # VR system related
         self.vr_monitor = None
         self.vr_thread = None
         self.vr_data_queue = Queue()
         self.latest_vr_data = None
         
-        # 新增：VR事件处理器
+        # New: VR event handler
         self.vr_event_handler = None
                     
-        # 运动学实例
+        # Kinematics instances
         self.kin_left = SO101Kinematics()
         self.kin_right = SO101Kinematics()
         
-        # 基座速度控制
+        # Base speed control
         self.current_base_speed = 0.0
         self.last_update_time = time.time()
         self.last_event_update_time = 0.0
         self.is_accelerating = False
         
-        # 状态标志
+        # Status flags
         self._connected = False
         self._calibrated = False
         
@@ -454,36 +454,36 @@ class XLerobotVRTeleop(Teleoperator):
 
     @property
     def action_features(self) -> dict:
-        """定义动作特征结构"""
-        # 根据XLerobot的动作空间定义
-        # 包括双臂关节、头部电机、基座移动
+        """Define action feature structure"""
+        # Define based on XLerobot's action space
+        # Including dual arm joints, head motors, base movement
         features = {}
         
-        # 左臂关节
+        # Left arm joints
         for joint_name in LEFT_JOINT_MAP.values():
             features[f"{joint_name}.pos"] = "float32"
         
-        # 右臂关节
+        # Right arm joints
         for joint_name in RIGHT_JOINT_MAP.values():
             features[f"{joint_name}.pos"] = "float32"
             
-        # 头部电机
+        # Head motors
         for motor_name in HEAD_MOTOR_MAP.values():
             features[f"{motor_name}.pos"] = "float32"
             
-        # 基座控制（根据XLerobot的基座控制方式）
+        # Base control (according to XLerobot's base control method)
         features["base_action"] = "dict"
         
         return features
 
     @property
     def feedback_features(self) -> dict:
-        """定义反馈特征结构"""
-        return {}  # VR控制器通常不需要反馈
+        """Define feedback feature structure"""
+        return {}  # VR controllers usually don't need feedback
 
     @property
     def is_connected(self) -> bool:
-        """检查连接状态"""
+        """Check connection status"""
         return (
             self._connected and 
             VR_AVAILABLE and 
@@ -493,11 +493,11 @@ class XLerobotVRTeleop(Teleoperator):
 
     @property
     def is_calibrated(self) -> bool:
-        """检查校准状态"""
+        """Check calibration status"""
         return self._calibrated
 
     def connect(self, calibrate: bool = True, robot=None) -> None:
-        """建立VR连接 - 优化版本"""
+        """Establish VR connection - optimized version"""
         if self.is_connected:
             raise RuntimeError(
                 "XLerobot VR is already connected. Do not run `connect()` twice."
@@ -512,10 +512,10 @@ class XLerobotVRTeleop(Teleoperator):
             logger.info("🔧 Initializing VR monitor...")
             self.vr_monitor = VRMonitor()
             
-            # 使用超时机制避免无限等待
+            # Use timeout mechanism to avoid infinite waiting
             init_success = False
             start_time = time.time()
-            timeout = 10.0  # 10秒超时
+            timeout = 10.0  # 10 second timeout
             
             while time.time() - start_time < timeout:
                 if self.vr_monitor.initialize():
@@ -533,7 +533,7 @@ class XLerobotVRTeleop(Teleoperator):
             )
             self.vr_thread.start()
             
-            # 等待线程启动
+            # Wait for thread to start
             time.sleep(0.5)
             
             if not self.vr_thread.is_alive():
@@ -542,9 +542,9 @@ class XLerobotVRTeleop(Teleoperator):
             logger.info("✅ VR system ready")
             self._connected = True
             
-            # 初始化VR事件处理器
+            # Initialize VR event handler
             self.vr_event_handler = VREventHandler(self.vr_monitor)
-            logger.info("🎮 VR事件处理器已初始化")
+            logger.info("🎮 VR event handler initialized")
             
             if calibrate and robot is not None:
                 robot_obs = robot.get_observation(use_camera=False)
@@ -556,13 +556,13 @@ class XLerobotVRTeleop(Teleoperator):
             raise RuntimeError(f"Failed to connect to VR: {e}")
 
     def calibrate(self, robot_obs: Optional[Dict] = None) -> None:
-        """校准VR控制器 - 优化版本"""
+        """Calibrate VR controllers - optimized version"""
         if robot_obs is None:
             logger.warning("[VR] No robot observation provided for calibration")
             return
             
         try:
-            # 初始化机械臂控制器
+            # Initialize arm controllers
             self.left_arm = SimpleTeleopArm(
                 LEFT_JOINT_MAP, robot_obs, self.kin_left, 
                 prefix="left", kp=self.config.kp
@@ -572,7 +572,7 @@ class XLerobotVRTeleop(Teleoperator):
                 prefix="right", kp=self.config.kp
             )
             
-            # 初始化头部控制器
+            # Initialize head controller
             self.head_control = SimpleHeadControl(robot_obs, kp=self.config.kp)
             
             logger.info("[VR] Controllers initialized successfully")
@@ -585,17 +585,17 @@ class XLerobotVRTeleop(Teleoperator):
 
 
     def get_action(self, robot_obs: Optional[Dict] = None, robot = None) -> dict[str, Any]:
-        """获取VR控制动作 - 高性能优化版本，并行处理事件和动作"""
+        """Get VR control action - high-performance optimized version, parallel processing of events and actions"""
         before_read_t = time.perf_counter()
         
         action = {}
         
-        # 快速检查VR监控状态
+        # Quick check VR monitoring status
         if not self.vr_monitor:
             self.logs["read_pos_dt_s"] = time.perf_counter() - before_read_t
             return action
         
-        # 一次性获取VR数据，避免重复调用
+        # Get VR data once to avoid repeated calls
         try:
             dual_goals = self.vr_monitor.get_latest_goal_nowait()
             if dual_goals is None:
@@ -606,67 +606,67 @@ class XLerobotVRTeleop(Teleoperator):
             right_goal = dual_goals.get("right")
             
         except Exception as e:
-            logger.warning(f"VR数据获取失败: {e}")
+            logger.warning(f"VR data acquisition failed: {e}")
             self.logs["read_pos_dt_s"] = time.perf_counter() - before_read_t
             return action
         
-        # 并行处理：机器人控制高频，事件处理低频
+        # Parallel processing: robot control at high frequency, event processing at low frequency
         if robot_obs is not None:
             try:
                 current_time = time.perf_counter()
                 
-                # 机器人控制 - 高频执行（60Hz）
+                # Robot control - high frequency execution (60Hz)
                 if left_goal is not None:
                     self.left_arm.handle_vr_input(left_goal, None)
                     
                 if right_goal is not None:
                     self.right_arm.handle_vr_input(right_goal, None)
                 
-                # 事件处理 - 低频执行（10Hz），只在间隔时间到达时处理
+                # Event processing - low frequency execution (10Hz), only process when interval time is reached
                 if (current_time - self.last_event_update_time) >= 2:
                     if left_goal is not None:
                         self._update_events_inline(left_goal)
                     self.last_event_update_time = current_time
                 
-                # 快速生成动作字典
+                # Quickly generate action dictionary
                 left_action = self.left_arm.p_control_action(robot_obs)
                 right_action = self.right_arm.p_control_action(robot_obs)
                 head_action = self.head_control.p_control_action(robot_obs)
                 base_action = get_vr_base_action(right_goal, robot)
                 
-                # 高效合并动作
+                # Efficiently merge actions
                 action.update(left_action)
                 action.update(right_action)
                 action.update(head_action)
                 action.update(base_action)
                 
             except Exception as e:
-                logger.error(f"动作生成失败: {e}")
+                logger.error(f"Action generation failed: {e}")
             
         self.logs["read_pos_dt_s"] = time.perf_counter() - before_read_t
         return action
     
     def _update_events_inline(self, left_goal):
         """
-        低频事件更新 - 10Hz频率，复用已获取的left_goal数据
-        只在事件间隔时间到达时执行，大幅减少处理开销
+        Low frequency event update - 10Hz frequency, reuse already acquired left_goal data
+        Only execute when event interval time is reached, greatly reducing processing overhead
         """
         if not self.vr_event_handler or not left_goal or not hasattr(left_goal, 'metadata'):
             return
             
-        # 直接使用已获取的数据，无需重新调用VR接口
+        # Directly use already acquired data, no need to call VR interface again
         try:
             self.vr_event_handler._process_left_controller(left_goal.metadata)
         except Exception as e:
-            logger.debug(f"事件低频更新失败: {e}")  # 降级为debug避免干扰主流程
+            logger.debug(f"Low frequency event update failed: {e}")  # Downgrade to debug to avoid disrupting main flow
 
     def send_feedback(self) -> None:
-        """发送反馈 - 优化版本，减少阻塞等待"""
+        """Send feedback - optimized version, reduce blocking wait"""
         if not self.vr_monitor:
             logger.warning("VR monitor not available for feedback")
             return
 
-        max_attempts = 200  # 最多尝试100次
+        max_attempts = 200  # Maximum 200 attempts
         attempt = 0
         
         while attempt < max_attempts:
@@ -681,7 +681,7 @@ class XLerobotVRTeleop(Teleoperator):
             
             attempt += 1
             logger.info(f'Waiting for VR controller data (attempt {attempt}/{max_attempts})')
-            time.sleep(0.5)  # 减少等待时间从8秒到0.5秒
+            time.sleep(0.5)  # Reduce wait time from 8 seconds to 0.5 seconds
         
         logger.warning("Timeout waiting for VR controller data")
 
@@ -689,7 +689,7 @@ class XLerobotVRTeleop(Teleoperator):
         pass
 
     def disconnect(self) -> None:
-        """断开VR连接"""
+        """Disconnect VR connection"""
         if not self.is_connected:
             raise RuntimeError(
                 "XLerobot VR is not connected."
@@ -697,7 +697,7 @@ class XLerobotVRTeleop(Teleoperator):
         
         try:
             if self.vr_monitor:
-                # VR Monitor通常在线程中运行，停止线程
+                # VR Monitor usually runs in a thread, stop the thread
                 pass
             
             self._connected = False
@@ -708,7 +708,7 @@ class XLerobotVRTeleop(Teleoperator):
             print(f"[VR] Error during disconnect: {e}")
 
     def move_to_zero_position(self, robot):
-        """移动所有控制器到零位"""
+        """Move all controllers to zero position"""
         robot_obs = robot.get_observation(use_camera=False)
         action = {}
         left_action = self.left_arm.move_to_zero_position(robot_obs)
@@ -723,19 +723,19 @@ class XLerobotVRTeleop(Teleoperator):
         return action
     
     def get_vr_events(self):
-        """获取VR事件状态（高性能版本 - 使用缓存，避免重复VR数据获取）"""
+        """Get VR event status (high-performance version - use cache to avoid repeated VR data acquisition)"""
         if self.vr_event_handler:
-            # 获取当前事件状态
+            # Get current event status
             events = self.vr_event_handler.get_events()
             
-            # 自动重置一次性事件，防止死循环
-            # 只有在事件为True时才重置，避免影响正常状态
+            # Automatically reset one-time events to prevent infinite loops
+            # Only reset when event is True to avoid affecting normal state
             if events.get("exit_early", False) or events.get("rerecord_episode", False):
                 self.vr_event_handler.reset_events()
             
             return events
         else:
-            # 返回默认事件状态
+            # Return default event status
             return {
                 "exit_early": False,
                 "rerecord_episode": False,
@@ -745,31 +745,31 @@ class XLerobotVRTeleop(Teleoperator):
             }
     
     def reset_vr_events(self):
-        """重置VR事件状态"""
+        """Reset VR event status"""
         if self.vr_event_handler:
             self.vr_event_handler.reset_events()
     
     def print_vr_control_guide(self):
-        """打印VR控制指南"""
+        """Print VR control guide"""
         if self.vr_event_handler:
             self.vr_event_handler.print_control_guide()
         else:
-            logger.info("VR事件处理器未初始化")
+            logger.info("VR event handler not initialized")
 
 
 def init_vr_listener(teleop_vr):
     """
-    初始化VR监听器，提供与init_keyboard_listener相同的接口
-    用于替代键盘事件监听，在record.py中使用
+    Initialize VR listener, providing the same interface as init_keyboard_listener
+    Used to replace keyboard event listening, used in record.py
     
     Args:
-        teleop_vr: XLerobotVRTeleop实例
+        teleop_vr: XLerobotVRTeleop instance
         
     Returns:
-        tuple: (listener, events) - 与init_keyboard_listener相同的返回格式
+        tuple: (listener, events) - same return format as init_keyboard_listener
     """
     if not isinstance(teleop_vr, XLerobotVRTeleop):
-        logger.error("teleop_vr必须是XLerobotVRTeleop实例")
+        logger.error("teleop_vr must be an XLerobotVRTeleop instance")
         return None, {
             "exit_early": False,
             "rerecord_episode": False,
@@ -778,10 +778,10 @@ def init_vr_listener(teleop_vr):
             "back_position": False,
         }
     
-    # 打印控制指南
+    # Print control guide
     teleop_vr.print_vr_control_guide()
     
-    # 创建虚拟listener对象（与keyboard listener兼容）
+    # Create virtual listener object (compatible with keyboard listener)
     class VRListener:
         def __init__(self, teleop_vr):
             self.teleop_vr = teleop_vr
@@ -789,29 +789,29 @@ def init_vr_listener(teleop_vr):
             
         def stop(self):
             self.is_alive = False
-            logger.info("VR监听器已停止")
+            logger.info("VR listener stopped")
     
     vr_listener = VRListener(teleop_vr)
     
-    # 获取初始事件状态
+    # Get initial event status
     events = teleop_vr.get_vr_events()
     
     return vr_listener, events
 
 class VREventHandler:
     """
-    VR事件处理器，专门处理录制控制事件
-    使用左侧VR手柄替代键盘控制
+    VR event handler, specifically handles recording control events
+    Use left VR controller to replace keyboard control
     """
     
     def __init__(self, vr_monitor):
         self.vr_monitor = vr_monitor
         self.events = {
-            "exit_early": False,      # 左手柄→右: 提前退出循环 (原右箭头键)
-            "rerecord_episode": False, # 左手柄→左: 重新录制episode (原左箭头键)
-            "stop_recording": False,   # 左手柄→上: 停止录制 (原ESC键)
-            "reset_position": False,   # 左手柄→下: 复位机器人 (新增功能)
-            "back_position": False,    # in the backet (新增功能)
+            "exit_early": False,      # Left controller right: Exit loop early (original right arrow key)
+            "rerecord_episode": False, # Left controller left: Re-record episode (original left arrow key)
+            "stop_recording": False,   # Left controller up: Stop recording (original ESC key)
+            "reset_position": False,   # Left controller down: Reset robot (new feature)
+            "back_position": False,    # In the bucket (new feature)
         }
         self.prev_states = {
             'thumbstick_x': 0,
@@ -820,10 +820,10 @@ class VREventHandler:
             'button_a': False,
             'button_b': False,
         }
-        self.threshold = 0.7  # 摇杆触发阈值
+        self.threshold = 0.7  # Thumbstick trigger threshold
         
     def update_events(self):
-        """更新VR事件状态"""
+        """Update VR event status"""
         if not self.vr_monitor:
             return self.events
             
@@ -851,33 +851,33 @@ class VREventHandler:
         thumb_y = thumb.get('y', 0)
 
         
-        # 检测摇杆方向事件（只在跨越阈值时触发）
+        # Detect thumbstick direction events (only trigger when crossing threshold)
         if thumb_x > self.threshold and self.prev_states['thumbstick_x'] <= self.threshold:
-            logger.info("🎮 VR左手柄向右 -> 提前退出循环")
+            logger.info("🎮 VR left controller right -> Exit loop early")
             self.events["exit_early"] = True
             
         elif thumb_x < -self.threshold or self.events['rerecord_episode'] == True:
-            logger.info("🎮 VR左手柄向左 -> 重新录制episode")
+            logger.info("🎮 VR left controller left -> Re-record episode")
             self.events["rerecord_episode"] = True
             self.events["exit_early"] = True
             
         if thumb_y > self.threshold and self.prev_states['thumbstick_y'] <= self.threshold:
-            logger.info("🎮 VR左手柄 -> 停止录制")
-            # self.events["stop_recording"] = True
-            # self.events["exit_early"] = True
-            self.events["back_position"] =  True
+            logger.info("🎮 VR left controller up -> Stop recording")
+            self.events["stop_recording"] = True
+            self.events["exit_early"] = True
+            # self.events["back_position"] = True
 
         elif thumb_y < -self.threshold and self.prev_states['thumbstick_y'] >= -self.threshold:
-            logger.info("🎮 VR左手柄向shang -> 复位机器人")
+            logger.info("🎮 VR left controller down -> Reset robot")
             self.events["reset_position"] = True
         else:
-            self.events["reset_position"] = False  # 复位事件为瞬时事件
+            self.events["reset_position"] = False  # Reset event is instantaneous
             self.events["back_position"] = False
         
-        # 检测扳机键事件
+        # Detect trigger key events
         trigger = metadata.get('trigger', 0) > 0.5
         
-        # 更新状态
+        # Update status
         self.prev_states.update({
             'thumbstick_x': thumb_x,
             'thumbstick_y': thumb_y,
@@ -885,21 +885,21 @@ class VREventHandler:
         })
     
     def reset_events(self):
-        """重置所有事件状态"""
+        """Reset all event status"""
         for key in self.events:
             self.events[key] = False
     
     def get_events(self):
-        """获取当前事件状态"""
+        """Get current event status"""
         return self.events.copy()
     
     def print_control_guide(self):
-        """打印VR控制指南"""
+        """Print VR control guide"""
         guide = """
-        🎮 VR左手柄控制指南:
-        ├── 👈 向左推摇杆: 重新录制当前episode
-        ├── 👉 向右推摇杆: 提前退出当前循环  
-        ├── 👆 向上推摇杆: 停止录制
-        ├── 👇 向下推摇杆: 复位机器人位置
+        🎮 VR Left Controller Guide:
+        ├── 👈 Push thumbstick left: Re-record current episode
+        ├── 👉 Push thumbstick right: Exit current loop early
+        ├── 👆 Push thumbstick up: Stop recording
+        ├── 👇 Push thumbstick down: Reset robot position
         """
         logger.info(guide)
