@@ -578,7 +578,7 @@ def main():
     shutdown_event = threading.Event()
     saving_in_progress_event = threading.Event()
 
-    robot, vr_monitor, camera_main, camera_left, dataset_saving_thread = None, None, None, None, None
+    robot, vr_monitor, dataset_saving_thread = None, None, None
 
     try:
         # Try to use saved calibration file to avoid recalibrating each time
@@ -658,7 +658,7 @@ def main():
             right_arm.handle_vr_input(right_goal, gripper_state=None)
             
             # Get actions from both arms and head
-            left_action, left_obs = left_arm.p_control_action(robot) if (ENABLE_LEFT_HAND and left_arm) else {}
+            left_action, left_obs = left_arm.p_control_action(robot) if (ENABLE_LEFT_HAND and left_arm is not None) else ({}, {})
             right_action, right_obs = right_arm.p_control_action(robot)
             head_action = head_control.p_control_action(robot) if (ENABLE_HEAD and head_control) else {}
 
