@@ -277,14 +277,19 @@ class SimpleTeleopArm:
         Returns:
             dict: Action dictionary with position commands for each joint
         """
-        obs = robot.get_observation()
-        current = {j: obs[f"{self.prefix}_arm_{j}.pos"] for j in self.joint_map}
+        if self.prefix=="left":
+            obs_raw = robot.bus_1.sync_read("Present_Position", robot.left_arm_motors)
+        else:
+            obs_raw = robot.bus_2.sync_read("Present_Position", robot.right_arm_motors)
+
+        obs_pos_suffix = {f"{v}.pos": obs_raw[v] for v in self.joint_map.values()}
+        current = {k: obs_raw[v] for k, v in self.joint_map.items()}
         action = {}
         for j in self.target_positions:
             error = self.target_positions[j] - current[j]
             control = self.kp * error
             action[f"{self.joint_map[j]}.pos"] = current[j] + control
-        return action
+        return action, obs_pos_suffix
 
 
 class SimpleHeadControl:
@@ -337,10 +342,10 @@ class SimpleHeadControl:
         Returns:
             dict: Action dictionary with position commands for head motors
         """
-        obs = robot.get_observation()
+        obs_raw = robot.bus_1.sync_read("Present_Position", robot.head_motors)
         action = {}
         for motor in self.target_positions:
-            current = obs.get(f"{HEAD_MOTOR_MAP[motor]}.pos", 0.0)
+            current = obs_raw.get(HEAD_MOTOR_MAP[motor], 0.0)
             error = self.target_positions[motor] - current
             control = self.kp * error
             action[f"{HEAD_MOTOR_MAP[motor]}.pos"] = current + control
@@ -661,8 +666,8 @@ def main():
             right_arm.handle_vr_input(right_goal, gripper_state=None)
             
             # Get actions from both arms and head
-            left_action = left_arm.p_control_action(robot) if (ENABLE_LEFT_HAND and left_arm) else {}
-            right_action = right_arm.p_control_action(robot)
+            left_action, left_obs = left_arm.p_control_action(robot) if (ENABLE_LEFT_HAND and left_arm) else {}
+            right_action, right_obs = right_arm.p_control_action(robot)
             head_action = head_control.p_control_action(robot) if (ENABLE_HEAD and head_control) else {}
 
             # Get base control from VR
